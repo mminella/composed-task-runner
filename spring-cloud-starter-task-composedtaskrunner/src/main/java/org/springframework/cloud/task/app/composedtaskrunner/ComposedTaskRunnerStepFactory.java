@@ -16,6 +16,8 @@
 
 package org.springframework.cloud.task.app.composedtaskrunner;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -28,7 +30,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.dataflow.rest.client.TaskOperations;
 import org.springframework.cloud.task.app.composedtaskrunner.properties.ComposedTaskProperties;
 import org.springframework.cloud.task.configuration.TaskConfigurer;
-import org.springframework.cloud.task.repository.TaskExplorer;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.interceptor.DefaultTransactionAttribute;
 import org.springframework.transaction.interceptor.TransactionAttribute;
@@ -64,33 +65,50 @@ public class ComposedTaskRunnerStepFactory implements FactoryBean<Step> {
 	private TaskConfigurer taskConfigurer;
 
 	public ComposedTaskRunnerStepFactory(
-			ComposedTaskProperties composedTaskProperties, String taskName,
-			Map<String, String> taskSpecificProps, List<String> arguments) {
+			ComposedTaskProperties composedTaskProperties, String taskName) {
 		Assert.notNull(composedTaskProperties,
 				"composedTaskProperties must not be null");
 		Assert.hasText(taskName, "taskName must not be empty nor null");
-		Assert.notNull(taskSpecificProps, "taskSpecificProps must not be null");
 
 		this.composedTaskProperties = composedTaskProperties;
 		this.taskName = taskName;
-		this.taskSpecificProps = taskSpecificProps;
-		this.arguments = arguments;
+	}
+
+	public void setTaskSpecificProps(Map<String, String> taskSpecificProps) {
+		if(taskSpecificProps != null) {
+			this.taskSpecificProps = taskSpecificProps;
+		}
+		else {
+			this.taskSpecificProps = new HashMap<>(0);
+		}
+	}
+
+	public void setArguments(List<String> arguments) {
+		if(arguments != null) {
+			this.arguments = arguments;
+		}
+		else {
+			this.arguments = new ArrayList<>(0);
+		}
 	}
 
 	@Override
 	public Step getObject() throws Exception {
 		TaskLauncherTasklet taskLauncherTasklet = new TaskLauncherTasklet(
 				this.taskOperations, taskConfigurer.getTaskExplorer(),
-				this.composedTaskProperties, this.taskName, this.taskSpecificProps,
-				this.arguments);
+				this.composedTaskProperties, this.taskName);
+
+		taskLauncherTasklet.setArguments(this.arguments);
+		taskLauncherTasklet.setProperties(this.taskSpecificProps);
+
 		String stepName = String.format("%s_%s",this.taskName,
 				UUID.randomUUID().toString());
-		Step step = this.steps.get(stepName)
+
+		return this.steps.get(stepName)
 				.tasklet(taskLauncherTasklet)
 				.transactionAttribute(getTransactionAttribute())
 				.listener(this.composedTaskStepExecutionListener)
 				.build();
-		return step;
 	}
 
 	/**
